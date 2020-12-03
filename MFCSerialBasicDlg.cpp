@@ -248,7 +248,7 @@ void CMFCSerialBasicDlg::OnBnClickedBtnOpencomm()
 
 	if (!bIsOpen) 
 	{
-		bIsOpen = gSerialPort.OpenComm(strComm);
+		bIsOpen = gSerialPort.OpenComm(strComm); //打开串口
 		if (bIsOpen) 
 		{
 			BOOL bRet = gSerialPort.SetCommState(dwBaudrate, byCheckBit, byDataBit, byStopBit);
@@ -279,8 +279,8 @@ void CMFCSerialBasicDlg::OnBnClickedBtnOpencomm()
 				return;
 			}
 
+			//已经打开串口，设置好参数了，创建一个线程来实时接收数据
 			gSerialPort.StartComm(); //创建一个线程
-
 			pBtnOpenComm->SetWindowTextW(_T("关闭串口"));
 		}
 		else
@@ -291,7 +291,7 @@ void CMFCSerialBasicDlg::OnBnClickedBtnOpencomm()
 	else
 	{
 		gSerialPort.CloseComm();
-		bIsOpen = FALSE;
+		bIsOpen = FALSE;  //点击关闭串口时，将bIsOpen置为FALSE
 		pBtnOpenComm->SetWindowTextW(_T("打开串口"));
 	}
 }
@@ -309,30 +309,49 @@ void CMFCSerialBasicDlg::OnBnClickedBtnSend()
 	ASSERT(pEditRecv);
 
 	CString strSend;
-	CString strRecv;
 	pEditSend->GetWindowTextW(strSend);
 	strSend = strSend.Trim(); //去除空格
 	if (strSend.IsEmpty()) {
 		//AfxMessageBox(_T("不能发送空数据！"));
 		return;
 	}
+	int nLen = (strSend.GetLength() + 1) * sizeof(TCHAR);
+	DWORD dwWrite = 0;
 
 	OVERLAPPED overlappedWrite;
 	ZeroMemory(&overlappedWrite, sizeof(OVERLAPPED));
 	overlappedWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
-	int nLen = (strSend.GetLength() + 1) * sizeof(TCHAR);
-	DWORD dwWrite = 0;
-	gSerialPort.WriteFile((TCHAR*)strSend.GetBuffer(), nLen, &dwWrite, &overlappedWrite);
-
-	pEditSend->SetWindowTextW(_T("")); //清空编辑框
-
-	pEditRecv->GetWindowText(strRecv);
-	strRecv += _T("Send: ");
-	strRecv += strSend;
-	strRecv += _T("\r\n");
-	pEditRecv->SetWindowText(strRecv);
+	//发送数据
+	BOOL bRet = gSerialPort.WriteFile((TCHAR*)strSend.GetBuffer(), nLen, &dwWrite, &overlappedWrite);
 	
+	if (!bRet)
+	{
+		if (ERROR_IO_PENDING == GetLastError()) {  //如果ReadFile挂起了，等待操作执行完
+			while (!bRet)
+			{
+				bRet = gSerialPort.GetOverlappedResult(&overlappedWrite, &dwWrite, TRUE); //最后参数为TRUE，操作完成之前不会有返回
+				if (GetLastError() != ERROR_IO_INCOMPLETE) {
+					break;
+				}
+			}
+		}
+	}
+
+	if (!bRet) {
+		AfxMessageBox(_T("发送数据失败！"));
+	}
+	else {
+		pEditSend->SetWindowTextW(_T("")); //清空编辑框
+		CString strRecv;
+		pEditRecv->GetWindowText(strRecv);
+		strRecv += _T("Send: ");
+		strRecv += strSend;
+		strRecv += _T("\r\n");
+		pEditRecv->SetWindowText(strRecv);  //用SetSel(-1); ReplaceSel 会更好
+	}
+
+
 	if (overlappedWrite.hEvent != 0) {
 		CloseHandle(overlappedWrite.hEvent);
 	}	

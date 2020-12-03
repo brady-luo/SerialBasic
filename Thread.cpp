@@ -17,14 +17,17 @@ CThread::~CThread()
 	}
 }
 
+//创建线程，将当前线程句柄 传给 m_hThread
 void CThread::Start()
 {
 	DWORD dwThreadID = 0;
 	HANDLE hThread = ::CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ThreadProc, this, 0, &dwThreadID);
 	ASSERT(hThread);
 	m_hThread = hThread;
+	m_bExit = false; //多次打开时，需要执行该行
 }
 
+//关闭线程
 void CThread::Stop()
 {
 	if (m_hThread) {
@@ -63,6 +66,6 @@ DWORD CThread::GetThreadData()
 
 void CThread::run()
 {
-	Sleep(100);
+	Sleep(100); //间隔100ms 避免占用过多资源
 }
 
